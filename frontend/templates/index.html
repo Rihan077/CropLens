@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CropLens - Agricultural Risk Intelligence</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/plotly.js/2.26.0/plotly.min.js"></script>
+</head>
+<body>
+
+    <!-- NAVBAR -->
+    <nav class="navbar">
+        <div class="nav-brand">
+            🌾 CropLens
+        </div>
+        <div class="nav-links">
+            <a href="/" class="active">Predict</a>
+            <a href="/map">Risk Map</a>
+        </div>
+    </nav>
+
+    <!-- HERO SECTION -->
+    <section class="hero">
+        <div class="hero-content">
+            <h1>Agricultural Risk Intelligence</h1>
+            <p>Data-driven crop risk assessment for Maharashtra's 36 districts</p>
+        </div>
+    </section>
+
+    <!-- MAIN CONTENT -->
+    <main class="container">
+
+        <!-- INPUT FORM -->
+        <div class="card form-card">
+            <h2>🔍 Assess Crop Risk</h2>
+            <p class="card-subtitle">Select district, crop and season to get risk assessment</p>
+
+            <div class="form-grid">
+                <div class="form-group">
+                    <label>District</label>
+                    <select id="district" class="form-select">
+                        <option value="">Select District...</option>
+                    </select>
+                </div>
+
+                <div class="form-group">
+                    <label>Crop</label>
+                    <select id="crop" class="form-select">
+                        <option value="">Select Crop...</option>
+                    </select>
+                </div>
+
+                <div class="form-group">
+                    <label>Season</label>
+                    <select id="season" class="form-select">
+                        <option value="">Select Season...</option>
+                    </select>
+                </div>
+            </div>
+
+            <button class="btn-predict" onclick="predict()">
+                🌱 Assess Risk
+            </button>
+        </div>
+
+        <!-- RESULT CARD -->
+        <div class="card result-card" id="result-card" style="display:none;">
+
+            <div class="result-header" id="result-header">
+                <div class="risk-badge" id="risk-badge"></div>
+                <div class="risk-meta">
+                    <h2 id="risk-title"></h2>
+                    <p id="risk-subtitle"></p>
+                </div>
+            </div>
+
+            <div class="stats-grid">
+                <div class="stat-box">
+                    <span class="stat-label">Confidence</span>
+                    <span class="stat-value" id="confidence"></span>
+                </div>
+                <div class="stat-box">
+                    <span class="stat-label">Predicted Yield</span>
+                    <span class="stat-value" id="predicted-yield"></span>
+                </div>
+                <div class="stat-box">
+                    <span class="stat-label">District Avg Yield</span>
+                    <span class="stat-value" id="avg-yield"></span>
+                </div>
+                <div class="stat-box">
+                    <span class="stat-label">Annual Rainfall</span>
+                    <span class="stat-value" id="rainfall"></span>
+                </div>
+                <div class="stat-box">
+                    <span class="stat-label">Rainfall Deviation</span>
+                    <span class="stat-value" id="rain-deviation"></span>
+                </div>
+                <div class="stat-box">
+                    <span class="stat-label">Soil Type</span>
+                    <span class="stat-value" id="soil-type"></span>
+                </div>
+            </div>
+
+            <!-- SHAP REASONS -->
+            <div class="reasons-section">
+                <h3>📊 Why This Risk Level?</h3>
+                <div id="reasons-list"></div>
+            </div>
+
+            <!-- RECOMMENDATION -->
+            <div class="recommendation-box" id="recommendation-box">
+                <h3>💡 Recommendation</h3>
+                <p id="recommendation-text"></p>
+            </div>
+
+        </div>
+
+        <!-- LOADING -->
+        <div class="loading" id="loading" style="display:none;">
+            <div class="spinner"></div>
+            <p>Analyzing risk factors...</p>
+        </div>
+
+        <!-- ERROR -->
+        <div class="error-card" id="error-card" style="display:none;">
+            <p id="error-text"></p>
+        </div>
+
+    </main>
+
+    <!-- FOOTER -->
+    <footer class="footer">
+        <p>🌾 CropLens — Agricultural Risk Intelligence System for Maharashtra</p>
+        <p>Built with LightGBM + SHAP + Flask | Data: Government of India</p>
+    </footer>
+
+    <script src="{{ url_for('static', filename='js/main.js') }}"></script>
+
+</body>
+</html>
