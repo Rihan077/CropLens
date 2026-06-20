@@ -9,6 +9,38 @@ document.addEventListener('DOMContentLoaded', function() {
     loadSeasons();
 });
 
+// Fetch live weather for selected district
+async function fetchWeather(district) {
+    try {
+        const res = await fetch(`/api/weather/${district}`);
+        const data = await res.json();
+        
+        if (data.current_rainfall_mm !== undefined) {
+            let weatherDiv = document.getElementById('weather-info');
+            if (!weatherDiv) {
+                weatherDiv = document.createElement('div');
+                weatherDiv.id = 'weather-info';
+                weatherDiv.style.cssText = `
+                    background: #E3F2FD;
+                    border-left: 4px solid #1565C0;
+                    border-radius: 8px;
+                    padding: 0.8rem 1rem;
+                    margin-top: 1rem;
+                    font-size: 0.9rem;
+                    color: #1A237E;
+                `;
+                document.querySelector('.form-card').appendChild(weatherDiv);
+            }
+            weatherDiv.innerHTML = `
+                🌧️ <strong>Live Rainfall Data for ${district}:</strong> 
+                ${data.current_rainfall_mm} mm (last 92 days)
+            `;
+        }
+    } catch (err) {
+        console.log('Weather fetch failed:', err);
+    }
+}
+
 // Load districts
 async function loadDistricts() {
     try {
@@ -20,6 +52,10 @@ async function loadDistricts() {
             option.value = d;
             option.textContent = d;
             select.appendChild(option);
+        });
+        // Fetch weather when district changes
+        select.addEventListener('change', function() {
+            if (this.value) fetchWeather(this.value);
         });
     } catch (err) {
         console.error('Error loading districts:', err);
