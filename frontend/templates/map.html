@@ -1,0 +1,283 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CropLens - Maharashtra Risk Map</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/plotly.js/2.26.0/plotly.min.js"></script>
+    <style>
+        .map-container {
+            background: white;
+            border-radius: 12px;
+            padding: 1.5rem;
+            box-shadow: 0 2px 12px rgba(0,0,0,0.08);
+            margin-bottom: 1.5rem;
+        }
+        .map-title {
+            font-size: 1.3rem;
+            color: #1B5E20;
+            margin-bottom: 0.4rem;
+        }
+        .map-subtitle {
+            color: #666;
+            font-size: 0.9rem;
+            margin-bottom: 1rem;
+        }
+        #maharashtra-map {
+            width: 100%;
+            height: 500px;
+        }
+        .legend {
+            display: flex;
+            gap: 1.5rem;
+            margin-top: 1rem;
+            flex-wrap: wrap;
+        }
+        .legend-item {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            font-size: 0.9rem;
+        }
+        .legend-color {
+            width: 20px;
+            height: 20px;
+            border-radius: 4px;
+        }
+        .district-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 0.9rem;
+        }
+        .district-table th {
+            background: #1B5E20;
+            color: white;
+            padding: 0.75rem 1rem;
+            text-align: left;
+        }
+        .district-table td {
+            padding: 0.65rem 1rem;
+            border-bottom: 1px solid #E0E0E0;
+        }
+        .district-table tr:hover {
+            background: #F5F7F5;
+        }
+        .risk-pill {
+            padding: 0.25rem 0.75rem;
+            border-radius: 20px;
+            font-size: 0.8rem;
+            font-weight: 600;
+        }
+        .pill-high { background: #FFEBEE; color: #C62828; }
+        .pill-medium { background: #FFF3E0; color: #E65100; }
+        .pill-low { background: #E8F5E9; color: #1B5E20; }
+        .stats-summary {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 1rem;
+            margin-bottom: 1.5rem;
+        }
+        .summary-box {
+            border-radius: 10px;
+            padding: 1.2rem;
+            text-align: center;
+        }
+        .summary-number {
+            font-size: 2rem;
+            font-weight: 700;
+            display: block;
+        }
+        .summary-label {
+            font-size: 0.85rem;
+            margin-top: 0.3rem;
+            display: block;
+        }
+    </style>
+</head>
+<body>
+
+    <!-- NAVBAR -->
+    <nav class="navbar">
+        <div class="nav-brand">🌾 CropLens</div>
+        <div class="nav-links">
+            <a href="/">Predict</a>
+            <a href="/map" class="active">Risk Map</a>
+        </div>
+    </nav>
+
+    <!-- HERO -->
+    <section class="hero">
+        <div class="hero-content">
+            <h1>Maharashtra Risk Map</h1>
+            <p>District-level crop risk overview across all 36 districts</p>
+        </div>
+    </section>
+
+    <main class="container">
+
+        <!-- SUMMARY STATS -->
+        <div class="stats-summary" id="stats-summary">
+            <div class="summary-box" style="background:#FFEBEE;">
+                <span class="summary-number" style="color:#C62828;" id="high-count">-</span>
+                <span class="summary-label" style="color:#C62828;">🔴 High Risk Districts</span>
+            </div>
+            <div class="summary-box" style="background:#FFF3E0;">
+                <span class="summary-number" style="color:#E65100;" id="medium-count">-</span>
+                <span class="summary-label" style="color:#E65100;">🟡 Medium Risk Districts</span>
+            </div>
+            <div class="summary-box" style="background:#E8F5E9;">
+                <span class="summary-number" style="color:#1B5E20;" id="low-count">-</span>
+                <span class="summary-label" style="color:#1B5E20;">🟢 Low Risk Districts</span>
+            </div>
+        </div>
+
+        <!-- MAP -->
+        <div class="map-container">
+            <h2 class="map-title">📍 District Risk Overview</h2>
+            <p class="map-subtitle">Risk levels based on historical yield patterns and rainfall data</p>
+            <div id="maharashtra-map"></div>
+            <div class="legend">
+                <div class="legend-item">
+                    <div class="legend-color" style="background:#C62828;"></div>
+                    <span>High Risk</span>
+                </div>
+                <div class="legend-item">
+                    <div class="legend-color" style="background:#E65100;"></div>
+                    <span>Medium Risk</span>
+                </div>
+                <div class="legend-item">
+                    <div class="legend-color" style="background:#1B5E20;"></div>
+                    <span>Low Risk</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- DISTRICT TABLE -->
+        <div class="map-container">
+            <h2 class="map-title">📋 All Districts Risk Summary</h2>
+            <p class="map-subtitle">Complete district-wise risk assessment</p>
+            <table class="district-table">
+                <thead>
+                    <tr>
+                        <th>#</th>
+                        <th>District</th>
+                        <th>Risk Level</th>
+                        <th>Annual Rainfall (mm)</th>
+                    </tr>
+                </thead>
+                <tbody id="district-table-body">
+                </tbody>
+            </table>
+        </div>
+
+    </main>
+
+    <footer class="footer">
+        <p>🌾 CropLens — Agricultural Risk Intelligence System for Maharashtra</p>
+        <p>Built with LightGBM + SHAP + Flask | Data: Government of India</p>
+    </footer>
+
+    <script>
+    // Load map data
+    async function loadMapData() {
+        try {
+            const res = await fetch('/api/map-data');
+            const data = await res.json();
+
+            // Count risks
+            let high = 0, medium = 0, low = 0;
+            data.forEach(d => {
+                if (d.risk_level === 'High Risk') high++;
+                else if (d.risk_level === 'Medium Risk') medium++;
+                else low++;
+            });
+
+            document.getElementById('high-count').textContent = high;
+            document.getElementById('medium-count').textContent = medium;
+            document.getElementById('low-count').textContent = low;
+
+            // Build chart
+            buildChart(data);
+
+            // Build table
+            buildTable(data);
+
+        } catch (err) {
+            console.error('Error loading map data:', err);
+        }
+    }
+
+    function buildChart(data) {
+        const districts = data.map(d => d.district);
+        const colors = data.map(d => {
+            if (d.risk_level === 'High Risk') return '#C62828';
+            if (d.risk_level === 'Medium Risk') return '#E65100';
+            return '#1B5E20';
+        });
+        const rainfall = data.map(d => d.annual_rainfall);
+        const riskLabels = data.map(d => d.risk_level);
+
+        const trace = {
+            x: districts,
+            y: rainfall,
+            type: 'bar',
+            marker: { color: colors },
+            text: riskLabels,
+            hovertemplate: '<b>%{x}</b><br>Rainfall: %{y} mm<br>Risk: %{text}<extra></extra>'
+        };
+
+        const layout = {
+            title: 'District-wise Annual Rainfall & Risk Level',
+            xaxis: {
+                tickangle: -45,
+                title: 'District'
+            },
+            yaxis: {
+                title: 'Annual Rainfall (mm)'
+            },
+            plot_bgcolor: '#F5F7F5',
+            paper_bgcolor: 'white',
+            margin: { b: 120 }
+        };
+
+        Plotly.newPlot('maharashtra-map', [trace], layout, {responsive: true});
+    }
+
+    function buildTable(data) {
+        const tbody = document.getElementById('district-table-body');
+        tbody.innerHTML = '';
+
+        data.sort((a, b) => {
+            const order = {'High Risk': 0, 'Medium Risk': 1, 'Low Risk': 2};
+            return order[a.risk_level] - order[b.risk_level];
+        });
+
+        data.forEach((d, i) => {
+            let pillClass = '';
+            if (d.risk_level === 'High Risk') pillClass = 'pill-high';
+            else if (d.risk_level === 'Medium Risk') pillClass = 'pill-medium';
+            else pillClass = 'pill-low';
+
+            const row = `
+                <tr>
+                    <td>${i + 1}</td>
+                    <td><strong>${d.district}</strong></td>
+                    <td>
+                        <span class="risk-pill ${pillClass}">
+                            ${d.risk_level}
+                        </span>
+                    </td>
+                    <td>${d.annual_rainfall} mm</td>
+                </tr>
+            `;
+            tbody.innerHTML += row;
+        });
+    }
+
+    // Load on page ready
+    document.addEventListener('DOMContentLoaded', loadMapData);
+    </script>
+
+</body>
+</html>
