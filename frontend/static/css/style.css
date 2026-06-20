@@ -346,3 +346,20 @@ body {
     border-top: 1px solid var(--border);
     margin-top: 2rem;
 }
+
+/* ── PDF BUTTON ── */
+.btn-pdf {
+    padding: 0.75rem 2rem;
+    background: #1565C0;
+    color: white;
+    border: none;
+    border-radius: 8px;
+    font-size: 0.95rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 0.2s;
+}
+
+.btn-pdf:hover {
+    background: #0D47A1;
+}

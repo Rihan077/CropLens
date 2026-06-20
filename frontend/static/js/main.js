@@ -14,7 +14,7 @@ async function fetchWeather(district) {
     try {
         const res = await fetch(`/api/weather/${district}`);
         const data = await res.json();
-        
+
         if (data.current_rainfall_mm !== undefined) {
             let weatherDiv = document.getElementById('weather-info');
             if (!weatherDiv) {
@@ -32,7 +32,7 @@ async function fetchWeather(district) {
                 document.querySelector('.form-card').appendChild(weatherDiv);
             }
             weatherDiv.innerHTML = `
-                🌧️ <strong>Live Rainfall Data for ${district}:</strong> 
+                🌧️ <strong>Live Rainfall Data for ${district}:</strong>
                 ${data.current_rainfall_mm} mm (last 92 days)
             `;
         }
@@ -130,7 +130,7 @@ async function predict() {
 
     } catch (err) {
         document.getElementById('error-card').style.display = 'block';
-        document.getElementById('error-text').textContent = 
+        document.getElementById('error-text').textContent =
             '❌ Error: ' + err.message;
     } finally {
         document.getElementById('loading').style.display = 'none';
@@ -171,26 +171,26 @@ function displayResult(data) {
     }
 
     // Set result header
-    document.getElementById('result-header').className = 
+    document.getElementById('result-header').className =
         'result-header ' + bgClass;
     document.getElementById('risk-badge').textContent = emoji;
     document.getElementById('risk-title').textContent = data.risk_level;
     document.getElementById('risk-title').className = colorClass;
-    document.getElementById('risk-subtitle').textContent = 
+    document.getElementById('risk-subtitle').textContent =
         `${data.district} | ${data.crop} | ${data.season} | ${data.year}`;
 
     // Set stats
-    document.getElementById('confidence').textContent = 
+    document.getElementById('confidence').textContent =
         data.confidence + '%';
-    document.getElementById('predicted-yield').textContent = 
+    document.getElementById('predicted-yield').textContent =
         data.predicted_yield + ' kg/ha';
-    document.getElementById('avg-yield').textContent = 
+    document.getElementById('avg-yield').textContent =
         data.district_avg_yield + ' kg/ha';
-    document.getElementById('rainfall').textContent = 
+    document.getElementById('rainfall').textContent =
         data.annual_rainfall + ' mm';
-    document.getElementById('rain-deviation').textContent = 
+    document.getElementById('rain-deviation').textContent =
         data.rainfall_deviation + '%';
-    document.getElementById('soil-type').textContent = 
+    document.getElementById('soil-type').textContent =
         data.soil_type;
 
     // Set reasons
@@ -200,13 +200,13 @@ function displayResult(data) {
     data.reasons.forEach(reason => {
         const isIncrease = reason.direction === 'increases_risk';
         const div = document.createElement('div');
-        div.className = 'reason-item ' + 
+        div.className = 'reason-item ' +
             (isIncrease ? 'reason-increases' : 'reason-reduces');
         div.innerHTML = `
             <span class="reason-icon">${isIncrease ? '↑' : '↓'}</span>
             <span class="reason-text">
-                <span class="reason-feature">${formatFeature(reason.feature)}</span>: 
-                ${reason.value.toFixed(1)} 
+                <span class="reason-feature">${formatFeature(reason.feature)}</span>:
+                ${reason.value.toFixed(1)}
                 — ${isIncrease ? 'Increases Risk' : 'Reduces Risk'}
             </span>
         `;
@@ -214,8 +214,11 @@ function displayResult(data) {
     });
 
     // Set recommendation
-    document.getElementById('recommendation-text').textContent = 
+    document.getElementById('recommendation-text').textContent =
         recommendation;
+
+    // Show PDF button
+    document.getElementById('btn-pdf').style.display = 'inline-block';
 
     // Scroll to result
     card.scrollIntoView({ behavior: 'smooth' });
@@ -249,4 +252,32 @@ function formatFeature(feature) {
         'district_encoded': 'District'
     };
     return names[feature] || feature;
+}
+
+// Download PDF report
+async function downloadPDF() {
+    const district = document.getElementById('district').value;
+    const crop = document.getElementById('crop').value;
+    const season = document.getElementById('season').value;
+
+    try {
+        const res = await fetch('/api/generate-pdf', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ district, crop, season })
+        });
+
+        if (!res.ok) throw new Error('PDF generation failed');
+
+        const blob = await res.blob();
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `CropLens_${district}_${crop}_${season}.pdf`;
+        a.click();
+        window.URL.revokeObjectURL(url);
+
+    } catch (err) {
+        alert('Error generating PDF: ' + err.message);
+    }
 }
