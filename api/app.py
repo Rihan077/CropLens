@@ -28,6 +28,24 @@ MODELS = os.path.join(BASE, 'models')
 PROCESSED = os.path.join(BASE, 'data', 'processed')
 
 # Load model and encoders
+# Download models from HF if not present
+from huggingface_hub import hf_hub_download, snapshot_download
+import shutil
+
+def ensure_models():
+    if not os.path.exists(os.path.join(MODELS, 'croplens_model.pkl')):
+        print("Downloading models from Hugging Face...")
+        snapshot_download(
+            repo_id='rihan077/CropLens',
+            repo_type='space',
+            local_dir=BASE,
+            ignore_patterns=['*.py', '*.html', '*.css', '*.js', 
+                           'Dockerfile', 'requirements.txt', 'README.md']
+        )
+        print("✅ Models downloaded")
+
+ensure_models()
+
 print("Loading model and encoders...")
 model = joblib.load(os.path.join(MODELS, 'croplens_model.pkl'))
 le_target = joblib.load(os.path.join(MODELS, 'label_encoder.pkl'))
