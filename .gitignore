@@ -10,3 +10,6 @@ data/raw/
 *.egg-info/
 dist/
 build/
+models/shap_explainer.pkl
+models/shap_summary_dot.png
+models/shap_global_importance.png
