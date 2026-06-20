@@ -1,4 +1,11 @@
 # CropLens - Flask Backend API
+from reportlab.lib.pagesizes import A4
+from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+from reportlab.lib.colors import HexColor
+from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
+from reportlab.lib.units import inch
+from flask import send_file
+import io
 import os
 import joblib
 import numpy as np
@@ -88,36 +95,36 @@ DISTRICT_COORDS = {
 
 def get_risk_details(district, crop, season):
     district = district.upper().strip()
-    
+
     mask = (
         (master_df['district'] == district) &
         (master_df['crop'] == crop) &
         (master_df['season'].str.strip() == season)
     )
     matches = master_df[mask]
-    
+
     if len(matches) == 0:
         return None, "No historical data found for this combination"
-    
+
     record = matches.iloc[-1]
     X_single = record[feature_cols].values.reshape(1, -1)
-    
+
     pred_encoded = model.predict(X_single)[0]
     pred_proba = model.predict_proba(X_single)[0]
     pred_label = le_target.inverse_transform([pred_encoded])[0]
     confidence = round(float(pred_proba.max()) * 100, 1)
     risk_score = round(float(pred_proba[pred_encoded]) * 100, 1)
-    
+
     shap_vals = explainer.shap_values(X_single)
     class_idx = int(pred_encoded)
     shap_for_class = shap_vals[0, :, class_idx]
-    
+
     explanation = pd.DataFrame({
         'feature': feature_cols,
         'value': X_single[0],
         'shap_value': shap_for_class
     }).sort_values('shap_value', key=abs, ascending=False)
-    
+
     reasons = []
     for _, row in explanation.head(6).iterrows():
         direction = "increases_risk" if row['shap_value'] > 0 else "reduces_risk"
@@ -127,7 +134,7 @@ def get_risk_details(district, crop, season):
             'direction': direction,
             'impact': round(float(abs(row['shap_value'])), 4)
         })
-    
+
     result = {
         'district': district,
         'crop': crop,
@@ -145,7 +152,7 @@ def get_risk_details(district, crop, season):
         'drought_streak': int(record['drought_streak']),
         'reasons': reasons
     }
-    
+
     return result, None
 
 
@@ -157,13 +164,16 @@ def get_risk_details(district, crop, season):
 def index():
     return render_template('index.html')
 
+
 @app.route('/result')
 def result():
     return render_template('result.html')
 
+
 @app.route('/map')
 def map_page():
     return render_template('map.html')
+
 
 @app.route('/api/predict', methods=['POST'])
 def predict():
@@ -172,17 +182,17 @@ def predict():
         district = data.get('district', '')
         crop = data.get('crop', '')
         season = data.get('season', '')
-        
+
         if not district or not crop or not season:
             return jsonify({'error': 'Missing required fields'}), 400
-        
+
         result, error = get_risk_details(district, crop, season)
-        
+
         if error:
             return jsonify({'error': error}), 404
-        
+
         return jsonify(result)
-    
+
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
@@ -215,26 +225,27 @@ def get_history(district, crop):
         ['year', 'yield_kg_per_hectare',
          'annual_rainfall', 'risk_level']
     ].sort_values('year')
-    
+
     return jsonify(history.to_dict(orient='records'))
 
 
 @app.route('/api/map-data', methods=['GET'])
 def get_map_data():
-    latest = master_df.sort_values('year').groupby('district').last().reset_index()
-    
+    latest = master_df.sort_values('year').groupby(
+        'district').last().reset_index()
+
     map_data = []
     for _, row in latest.iterrows():
         mask = (master_df['district'] == row['district'])
         district_data = master_df[mask]
         risk = district_data['risk_level'].mode()[0]
-        
+
         map_data.append({
             'district': row['district'],
             'risk_level': risk,
             'annual_rainfall': round(float(row['annual_rainfall']), 1),
         })
-    
+
     return jsonify(map_data)
 
 
@@ -242,12 +253,12 @@ def get_map_data():
 def get_weather(district):
     try:
         district = district.upper().strip()
-        
+
         if district not in DISTRICT_COORDS:
             return jsonify({'error': 'District not found'}), 404
-        
+
         lat, lon = DISTRICT_COORDS[district]
-        
+
         url = "https://api.open-meteo.com/v1/forecast"
         params = {
             "latitude": lat,
@@ -256,13 +267,13 @@ def get_weather(district):
             "timezone": "Asia/Kolkata",
             "past_days": 92
         }
-        
+
         response = req.get(url, params=params, timeout=10)
         data = response.json()
-        
+
         precipitation = data['daily']['precipitation_sum']
         total_rainfall = sum(p for p in precipitation if p is not None)
-        
+
         return jsonify({
             'district': district,
             'current_rainfall_mm': round(total_rainfall, 1),
@@ -270,7 +281,185 @@ def get_weather(district):
             'longitude': lon,
             'period': 'Last 92 days'
         })
-    
+
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/generate-pdf', methods=['POST'])
+def generate_pdf():
+    try:
+        data = request.get_json()
+        district = data.get('district', '')
+        crop = data.get('crop', '')
+        season = data.get('season', '')
+
+        result, error = get_risk_details(district, crop, season)
+        if error:
+            return jsonify({'error': error}), 404
+
+        buffer = io.BytesIO()
+        doc = SimpleDocTemplate(buffer, pagesize=A4,
+                                rightMargin=50, leftMargin=50,
+                                topMargin=50, bottomMargin=50)
+
+        green = HexColor('#1B5E20')
+        red = HexColor('#C62828')
+        orange = HexColor('#E65100')
+
+        if result['risk_level'] == 'High Risk':
+            risk_color = red
+        elif result['risk_level'] == 'Medium Risk':
+            risk_color = orange
+        else:
+            risk_color = green
+
+        elements = []
+
+        title_style = ParagraphStyle(
+            'Title', fontSize=20, textColor=green,
+            spaceAfter=6, fontName='Helvetica-Bold'
+        )
+        elements.append(Paragraph(
+            'CropLens Risk Assessment Report', title_style))
+        elements.append(Paragraph(
+            'Agricultural Risk Intelligence System for Maharashtra',
+            ParagraphStyle('Sub', fontSize=10,
+                           textColor=HexColor('#666666'), spaceAfter=20)
+        ))
+        elements.append(Spacer(1, 0.2 * inch))
+
+        input_data = [
+            ['Field', 'Value'],
+            ['District', result['district']],
+            ['Crop', result['crop']],
+            ['Season', result['season']],
+            ['Year', result['year']],
+            ['Soil Type', result['soil_type']],
+        ]
+
+        input_table = Table(input_data, colWidths=[2 * inch, 4 * inch])
+        input_table.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (-1, 0), green),
+            ('TEXTCOLOR', (0, 0), (-1, 0), HexColor('#FFFFFF')),
+            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+            ('FONTSIZE', (0, 0), (-1, -1), 10),
+            ('ROWBACKGROUNDS', (0, 1), (-1, -1),
+             [HexColor('#F5F7F5'), HexColor('#FFFFFF')]),
+            ('GRID', (0, 0), (-1, -1), 0.5, HexColor('#E0E0E0')),
+            ('PADDING', (0, 0), (-1, -1), 8),
+        ]))
+        elements.append(input_table)
+        elements.append(Spacer(1, 0.3 * inch))
+
+        risk_style = ParagraphStyle(
+            'Risk', fontSize=16, textColor=risk_color,
+            spaceAfter=6, fontName='Helvetica-Bold'
+        )
+        elements.append(Paragraph(
+            f'Risk Level: {result["risk_level"]}', risk_style))
+        elements.append(Paragraph(
+            f'Confidence: {result["confidence"]}%',
+            ParagraphStyle('Conf', fontSize=12, spaceAfter=20)
+        ))
+        elements.append(Spacer(1, 0.2 * inch))
+
+        stats_data = [
+            ['Metric', 'Value'],
+            ['Predicted Yield', f'{result["predicted_yield"]} kg/ha'],
+            ['District Avg Yield', f'{result["district_avg_yield"]} kg/ha'],
+            ['Annual Rainfall', f'{result["annual_rainfall"]} mm'],
+            ['Rainfall Deviation', f'{result["rainfall_deviation"]}%'],
+            ['Drought Streak', f'{result["drought_streak"]} years'],
+            ['Soil Compatibility', str(result["compatibility_score"])],
+        ]
+
+        stats_table = Table(stats_data, colWidths=[3 * inch, 3 * inch])
+        stats_table.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (-1, 0), green),
+            ('TEXTCOLOR', (0, 0), (-1, 0), HexColor('#FFFFFF')),
+            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+            ('FONTSIZE', (0, 0), (-1, -1), 10),
+            ('ROWBACKGROUNDS', (0, 1), (-1, -1),
+             [HexColor('#F5F7F5'), HexColor('#FFFFFF')]),
+            ('GRID', (0, 0), (-1, -1), 0.5, HexColor('#E0E0E0')),
+            ('PADDING', (0, 0), (-1, -1), 8),
+        ]))
+        elements.append(stats_table)
+        elements.append(Spacer(1, 0.3 * inch))
+
+        elements.append(Paragraph(
+            'Key Risk Factors (SHAP Analysis)',
+            ParagraphStyle('H2', fontSize=13, textColor=green,
+                           fontName='Helvetica-Bold', spaceAfter=10)
+        ))
+
+        reasons_data = [['Factor', 'Value', 'Impact']]
+        for r in result['reasons']:
+            direction = '^ Increases Risk' if r['direction'] == 'increases_risk' \
+                else 'v Reduces Risk'
+            feature_name = r['feature'].replace('_', ' ').title()
+            reasons_data.append([feature_name, str(r['value']), direction])
+
+        reasons_table = Table(reasons_data,
+                              colWidths=[2.5 * inch, 1.5 * inch, 2 * inch])
+        reasons_table.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (-1, 0), green),
+            ('TEXTCOLOR', (0, 0), (-1, 0), HexColor('#FFFFFF')),
+            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+            ('FONTSIZE', (0, 0), (-1, -1), 9),
+            ('ROWBACKGROUNDS', (0, 1), (-1, -1),
+             [HexColor('#F5F7F5'), HexColor('#FFFFFF')]),
+            ('GRID', (0, 0), (-1, -1), 0.5, HexColor('#E0E0E0')),
+            ('PADDING', (0, 0), (-1, -1), 8),
+        ]))
+        elements.append(reasons_table)
+        elements.append(Spacer(1, 0.3 * inch))
+
+        if result['risk_level'] == 'High Risk':
+            rec = (f"High caution advised for {crop} in {district}. "
+                   f"Consider crop insurance before planting. "
+                   f"Rainfall is {result['rainfall_deviation']}% from normal. "
+                   f"Recommend drought-resistant varieties.")
+        elif result['risk_level'] == 'Medium Risk':
+            rec = (f"Moderate risk for {crop} in {district}. "
+                   f"Normal precautions advised. "
+                   f"Monitor rainfall patterns closely during growing season.")
+        else:
+            rec = (f"Favorable conditions for {crop} in {district}. "
+                   f"Good season expected. "
+                   f"Standard farming practices should yield good results.")
+
+        elements.append(Paragraph(
+            'Recommendation',
+            ParagraphStyle('H2', fontSize=13, textColor=green,
+                           fontName='Helvetica-Bold', spaceAfter=6)
+        ))
+        elements.append(Paragraph(
+            rec,
+            ParagraphStyle('Body', fontSize=10, spaceAfter=20, leading=16)
+        ))
+
+        elements.append(Spacer(1, 0.3 * inch))
+        elements.append(Paragraph(
+            'Generated by CropLens - Agricultural Risk Intelligence System | '
+            'Built with LightGBM + SHAP | Data: Government of India',
+            ParagraphStyle('Footer', fontSize=8,
+                           textColor=HexColor('#999999'), alignment=1)
+        ))
+
+        doc.build(elements)
+        buffer.seek(0)
+
+        filename = f'CropLens_{district}_{crop}_{season}.pdf'.replace(
+            ' ', '_')
+        return send_file(
+            buffer,
+            as_attachment=True,
+            download_name=filename,
+            mimetype='application/pdf'
+        )
+
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
