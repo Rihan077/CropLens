@@ -89,6 +89,33 @@ DISTRICT_COORDS = {
     'YAVATMAL': (20.3888, 78.1204),
 }
 
+# Feature display names for PDF
+FEATURE_DISPLAY_NAMES = {
+    'annual_rainfall': 'Annual Rainfall (mm)',
+    'monsoon_rainfall': 'Monsoon Rainfall (mm)',
+    'rainfall_deviation_pct': 'Rainfall Deviation %',
+    'rain_june': 'June Rainfall (mm)',
+    'rain_july': 'July Rainfall (mm)',
+    'rain_august': 'August Rainfall (mm)',
+    'rain_september': 'September Rainfall (mm)',
+    'normal_annual_rainfall': 'Normal Annual Rainfall',
+    'drought_streak': 'Drought Streak (years)',
+    'yield_lag_1': 'Last Year Yield (kg/ha)',
+    'yield_lag_2': '2 Years Ago Yield (kg/ha)',
+    'yield_lag_3': '3 Years Ago Yield (kg/ha)',
+    'yield_3yr_avg': '3 Year Avg Yield (kg/ha)',
+    'yield_trend': 'Yield Trend',
+    'yield_volatility': 'Yield Volatility',
+    'compatibility_score': 'Soil Compatibility Score',
+    'msp_per_quintal': 'MSP Price (Rs/quintal)',
+    'msp_growth_rate': 'MSP Growth Rate %',
+    'area_hectares': 'Cultivated Area (hectares)',
+    'crop_encoded': 'Crop Type',
+    'soil_encoded': 'Soil Type',
+    'season_encoded': 'Season',
+    'district_encoded': 'District'
+}
+
 # ─────────────────────────────────────────
 # HELPER FUNCTIONS
 # ─────────────────────────────────────────
@@ -396,10 +423,27 @@ def generate_pdf():
 
         reasons_data = [['Factor', 'Value', 'Impact']]
         for r in result['reasons']:
-            direction = '^ Increases Risk' if r['direction'] == 'increases_risk' \
-                else 'v Reduces Risk'
-            feature_name = r['feature'].replace('_', ' ').title()
-            reasons_data.append([feature_name, str(r['value']), direction])
+            direction = 'Increases Risk' if r['direction'] == 'increases_risk' \
+                else 'Reduces Risk'
+            feature_name = FEATURE_DISPLAY_NAMES.get(
+                r['feature'], r['feature'].replace('_', ' ').title()
+            )
+            # Show human readable values for encoded features
+            display_value = str(r['value'])
+            if r['feature'] == 'crop_encoded':
+                display_value = result['crop']
+            elif r['feature'] == 'soil_encoded':
+                display_value = result['soil_type']
+            elif r['feature'] == 'season_encoded':
+                display_value = result['season']
+            elif r['feature'] == 'district_encoded':
+                display_value = result['district']
+
+            reasons_data.append([
+                feature_name,
+                display_value,
+                direction
+            ])
 
         reasons_table = Table(reasons_data,
                               colWidths=[2.5 * inch, 1.5 * inch, 2 * inch])
