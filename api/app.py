@@ -13,6 +13,7 @@ import pandas as pd
 import requests as req
 from flask import Flask, request, jsonify, render_template
 from flask_cors import CORS
+from huggingface_hub import hf_hub_download
 
 # Initialize Flask app
 app = Flask(
@@ -27,25 +28,48 @@ BASE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 MODELS = os.path.join(BASE, 'models')
 PROCESSED = os.path.join(BASE, 'data', 'processed')
 
-# Load model and encoders
-# Download models from HF if not present
-from huggingface_hub import hf_hub_download, snapshot_download
-import shutil
 
 def ensure_models():
-    if not os.path.exists(os.path.join(MODELS, 'croplens_model.pkl')):
+    model_path = os.path.join(MODELS, 'croplens_model.pkl')
+    if not os.path.exists(model_path):
         print("Downloading models from Hugging Face...")
-        snapshot_download(
-            repo_id='rihan077/CropLens',
-            repo_type='space',
-            local_dir=BASE,
-            ignore_patterns=['*.py', '*.html', '*.css', '*.js', 
-                           'Dockerfile', 'requirements.txt', 'README.md']
-        )
-        print("✅ Models downloaded")
+        os.makedirs(MODELS, exist_ok=True)
+        os.makedirs(PROCESSED, exist_ok=True)
+
+        model_files = [
+            'models/croplens_model.pkl',
+            'models/label_encoder.pkl',
+            'models/crop_encoder.pkl',
+            'models/soil_encoder.pkl',
+            'models/season_encoder.pkl',
+            'models/district_encoder.pkl',
+            'models/feature_columns.pkl',
+            'models/shap_explainer.pkl',
+        ]
+
+        data_files = [
+            'data/processed/master_dataset.csv',
+            'data/processed/maharashtra_crops_clean.csv',
+            'data/processed/rainfall_clean.csv',
+        ]
+
+        for file_path in model_files + data_files:
+            local_path = os.path.join(BASE, file_path)
+            os.makedirs(os.path.dirname(local_path), exist_ok=True)
+            hf_hub_download(
+                repo_id='rihan077/CropLens',
+                repo_type='space',
+                filename=file_path,
+                local_dir=BASE
+            )
+            print(f'Downloaded: {file_path}')
+
+        print("✅ All files downloaded")
+
 
 ensure_models()
 
+# Load model and encoders
 print("Loading model and encoders...")
 model = joblib.load(os.path.join(MODELS, 'croplens_model.pkl'))
 le_target = joblib.load(os.path.join(MODELS, 'label_encoder.pkl'))
@@ -446,7 +470,6 @@ def generate_pdf():
             feature_name = FEATURE_DISPLAY_NAMES.get(
                 r['feature'], r['feature'].replace('_', ' ').title()
             )
-            # Show human readable values for encoded features
             display_value = str(r['value'])
             if r['feature'] == 'crop_encoded':
                 display_value = result['crop']
@@ -540,5 +563,5 @@ def health():
 # ─────────────────────────────────────────
 
 if __name__ == '__main__':
-   port = int(os.environ.get('PORT', 7860))
-app.run(debug=False, host='0.0.0.0', port=port)
+    port = int(os.environ.get('PORT', 7860))
+    app.run(debug=False, host='0.0.0.0', port=port)
